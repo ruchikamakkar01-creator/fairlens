@@ -30,4 +30,4 @@ COPY backend ./backend
 EXPOSE 8080
 
 # Run the application
-CMD uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8080}
+CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8080}"]

@@ -26,8 +26,7 @@ app.add_middleware(
 
 app.include_router(analyze_router, prefix="/api")
 
-# Serve static files from the 'dist' directory (built React app)
-app.mount("/", StaticFiles(directory="dist", html=True), name="static")
+
 
 
 @app.get("/api/health")
@@ -62,3 +61,6 @@ async def unhandled_exception_handler(_request: Request, exc: Exception):
             "detail": "Something went wrong while processing your request.",
         },
     )
+
+# Serve static files from the 'dist' directory (built React app)
+app.mount("/", StaticFiles(directory="dist", html=True), name="static")

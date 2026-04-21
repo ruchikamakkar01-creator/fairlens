@@ -77,18 +77,19 @@ def generate_gemini_insights(
     positive_label = target_positive_label or "positive outcome"
     prompt = (
         "You are helping a responsible-AI hackathon team. "
-        "Produce exactly 3 short bullet-style insights, each one sentence. "
+        "Produce exactly 3 short bullet-style insights, each one complete, grammatically correct sentence. "
         f"Target column: {target_column}. Positive outcome label: {positive_label}. "
         f"Sensitive features: {sensitive_name}. Bias score: {bias_score:.2f}. "
         f"Predicted {positive_label} rates: {groups_summary}. "
-        "Focus on fairness patterns, practical interpretation, and plain English. Avoid legal advice."
+        "Focus on fairness patterns, practical interpretation, and plain English. Avoid legal advice. "
+        "Each insight must be a complete sentence ending with a period."
     )
-    text = call_gemini(prompt, max_output_tokens=180)
+    text = call_gemini(prompt, max_output_tokens=300)
     if not text:
         return None
 
     lines = [line.strip("-• ").strip() for line in text.splitlines() if line.strip()]
-    cleaned = [line for line in lines if len(line) > 8]
+    cleaned = [line for line in lines if len(line) > 10]
     return cleaned[:3] if cleaned else None
 
 
@@ -103,14 +104,15 @@ def generate_gemini_recommendation(
     positive_label = target_positive_label or "positive outcome"
     prompt = (
         "You are advising a team building a fairness dashboard for a Google hackathon. "
-        "Write one concise mitigation recommendation, 1 to 2 sentences max. "
+        "Write one complete, concise mitigation recommendation with 1 to 2 complete sentences. "
         f"Target column: {target_column}. Positive outcome label: {positive_label}. "
         f"Sensitive features: {sensitive_name}. Bias score: {bias_score:.2f}. "
         f"Predicted {positive_label} rates: {groups_summary}. "
         "Recommend the most useful next step among rebalancing, removing sensitive features from inputs where appropriate, "
-        "or applying a fairness constraint."
+        "or applying a fairness constraint. "
+        "Ensure your response is a complete, grammatically correct sentence or sentences."
     )
-    return call_gemini(prompt, max_output_tokens=120)
+    return call_gemini(prompt, max_output_tokens=180)
 
 
 def build_analysis_response(

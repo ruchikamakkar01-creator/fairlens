@@ -65,7 +65,9 @@ function App() {
   const [selectedFile, setSelectedFile] = useState("No file selected");
   const [datasetFile, setDatasetFile] = useState(null);
   const [availableColumns, setAvailableColumns] = useState([]);
-  const [availableSensitiveOptions, setAvailableSensitiveOptions] = useState([]);
+  const [availableSensitiveOptions, setAvailableSensitiveOptions] = useState(
+    [],
+  );
   const [columnSamples, setColumnSamples] = useState({});
   const [targetColumn, setTargetColumn] = useState("");
   const [sensitiveFeatures, setSensitiveFeatures] = useState([]);
@@ -145,7 +147,9 @@ function App() {
       return false;
     }
 
-    const normalized = values.map((value) => String(value).trim().toLowerCase());
+    const normalized = values.map((value) =>
+      String(value).trim().toLowerCase(),
+    );
     const unique = new Set(normalized);
     return unique.size === 2;
   }
@@ -160,19 +164,29 @@ function App() {
       .map((value) => String(value).trim().toLowerCase())
       .filter(Boolean);
     const uniqueCount = new Set(normalized).size;
-    const numericCount = normalized.filter((value) => !Number.isNaN(Number(value))).length;
-    return normalized.length > 0 && numericCount / normalized.length >= 0.8 && uniqueCount > threshold;
+    const numericCount = normalized.filter(
+      (value) => !Number.isNaN(Number(value)),
+    ).length;
+    return (
+      normalized.length > 0 &&
+      numericCount / normalized.length >= 0.8 &&
+      uniqueCount > threshold
+    );
   }
 
   function suggestTargetColumn(headers, samples) {
     const byName = headers.find((header) =>
-      /loan|approved|hired|decision|target|label|outcome|admit|accept|status|income/i.test(header),
+      /loan|approved|hired|decision|target|label|outcome|admit|accept|status|income/i.test(
+        header,
+      ),
     );
     if (byName) {
       return byName;
     }
 
-    const binaryCandidate = headers.find((header) => isBinaryLike(samples[header] || []));
+    const binaryCandidate = headers.find((header) =>
+      isBinaryLike(samples[header] || []),
+    );
     return binaryCandidate || "";
   }
 
@@ -183,8 +197,12 @@ function App() {
         header,
       ),
     );
-    const remaining = candidates.filter((header) => !prioritized.includes(header));
-    const safeRemaining = remaining.filter((header) => !isContinuousFeature(header, samples, 10));
+    const remaining = candidates.filter(
+      (header) => !prioritized.includes(header),
+    );
+    const safeRemaining = remaining.filter(
+      (header) => !isContinuousFeature(header, samples, 10),
+    );
     return [...prioritized, ...safeRemaining].slice(0, 4);
   }
 
@@ -229,11 +247,15 @@ function App() {
   }
 
   function formatMetric(value, digits = 3) {
-    return typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) : "N/A";
+    return typeof value === "number" && Number.isFinite(value)
+      ? value.toFixed(digits)
+      : "N/A";
   }
 
   function getOutcomeRateLabel(targetColumnName, positiveLabel) {
-    const cleanedTarget = String(targetColumnName || "").replace(/_/g, " ").trim();
+    const cleanedTarget = String(targetColumnName || "")
+      .replace(/_/g, " ")
+      .trim();
     const cleanedPositive = String(positiveLabel || "").trim();
 
     if (cleanedPositive) {
@@ -313,8 +335,12 @@ function App() {
 
       setAnalysisData({
         score: payload.bias_score,
-        demographicParityDifference: toNumberOrNull(payload.demographic_parity_difference),
-        equalizedOddsDifference: toNumberOrNull(payload.equalized_odds_difference),
+        demographicParityDifference: toNumberOrNull(
+          payload.demographic_parity_difference,
+        ),
+        equalizedOddsDifference: toNumberOrNull(
+          payload.equalized_odds_difference,
+        ),
         status: payload.severity,
         badge: payload.badge,
         performance: {
@@ -328,7 +354,10 @@ function App() {
         insights: payload.insights,
         alerts: payload.alerts,
         recommendedAction: payload.recommended_action,
-        recommendationSource: payload.recommendation_source || payload.insights_source || "rule-based",
+        recommendationSource:
+          payload.recommendation_source ||
+          payload.insights_source ||
+          "rule-based",
       });
       setAnalysisMeta({
         datasetName: payload.dataset_name,
@@ -336,7 +365,8 @@ function App() {
         targetPositiveLabel: payload.target_positive_label || "",
         detectedSensitiveFeatures: payload.sensitive_features,
         targetNote: payload.target_note || "",
-        fairnessMetric: payload.fairness_metric || "Demographic Parity Difference",
+        fairnessMetric:
+          payload.fairness_metric || "Demographic Parity Difference",
       });
       setInsightsSource(payload.insights_source || "rule-based");
       setInsightsError(payload.insights_error || "");
@@ -367,19 +397,22 @@ function App() {
         const selectedCount = Object.values(fixes).filter(Boolean).length;
         setAfterData({
           score: selectedCount >= 2 ? 0.21 : selectedCount === 1 ? 0.36 : 0.58,
-          demographicParityDifference: selectedCount >= 2 ? 0.21 : selectedCount === 1 ? 0.36 : 0.58,
-          equalizedOddsDifference: selectedCount >= 2 ? 0.17 : selectedCount === 1 ? 0.29 : 0.43,
+          demographicParityDifference:
+            selectedCount >= 2 ? 0.21 : selectedCount === 1 ? 0.36 : 0.58,
+          equalizedOddsDifference:
+            selectedCount >= 2 ? 0.17 : selectedCount === 1 ? 0.29 : 0.43,
           performance:
             selectedCount >= 2
               ? { accuracy: 0.79, precision: 0.76, recall: 0.75 }
               : selectedCount === 1
                 ? { accuracy: 0.8, precision: 0.76, recall: 0.73 }
                 : { accuracy: 0.82, precision: 0.79, recall: 0.68 },
-          groupMetrics: selectedCount >= 2
-            ? { Male: 69, Female: 63 }
-            : selectedCount === 1
-              ? { Male: 70, Female: 56 }
-              : { Male: 72, Female: 45 },
+          groupMetrics:
+            selectedCount >= 2
+              ? { Male: 69, Female: 63 }
+              : selectedCount === 1
+                ? { Male: 70, Female: 56 }
+                : { Male: 72, Female: 45 },
           recommendedAction:
             "Review the improved model on a fresh split and confirm fairness remains stable across the selected groups.",
           recommendationSource: "demo",
@@ -406,13 +439,19 @@ function App() {
       const payload = await parseApiResponse(response);
 
       if (!response.ok) {
-        throw new Error(payload.detail || payload.error || "Bias mitigation failed.");
+        throw new Error(
+          payload.detail || payload.error || "Bias mitigation failed.",
+        );
       }
 
       setAfterData({
         score: payload.bias_score,
-        demographicParityDifference: toNumberOrNull(payload.demographic_parity_difference),
-        equalizedOddsDifference: toNumberOrNull(payload.equalized_odds_difference),
+        demographicParityDifference: toNumberOrNull(
+          payload.demographic_parity_difference,
+        ),
+        equalizedOddsDifference: toNumberOrNull(
+          payload.equalized_odds_difference,
+        ),
         performance: {
           accuracy: toNumberOrNull(payload?.performance?.accuracy),
           precision: toNumberOrNull(payload?.performance?.precision),
@@ -420,7 +459,10 @@ function App() {
         },
         groupMetrics: payload.group_metrics,
         recommendedAction: payload.recommended_action,
-        recommendationSource: payload.recommendation_source || payload.insights_source || "rule-based",
+        recommendationSource:
+          payload.recommendation_source ||
+          payload.insights_source ||
+          "rule-based",
       });
       setRecommendationError(payload.recommendation_error || "");
       setRequestMessage("");
@@ -450,13 +492,18 @@ function App() {
     );
   }
 
-  const fairnessLift = analysisData.score > 0
-    ? Math.round(((analysisData.score - afterData.score) / analysisData.score) * 100)
-    : 0;
+  const fairnessLift =
+    analysisData.score > 0
+      ? Math.round(
+          ((analysisData.score - afterData.score) / analysisData.score) * 100,
+        )
+      : 0;
   const accuracyDelta =
     typeof afterData.performance?.accuracy === "number" &&
     typeof analysisData.performance?.accuracy === "number"
-      ? (afterData.performance.accuracy - analysisData.performance.accuracy).toFixed(3)
+      ? (
+          afterData.performance.accuracy - analysisData.performance.accuracy
+        ).toFixed(3)
       : "N/A";
   const scoreBadgeClass =
     analysisData.badge === "Low"
@@ -467,12 +514,14 @@ function App() {
   const currentGroups = getGroupEntries(analysisData.groupMetrics);
   const beforeCompareGroups = getPrimaryGroups(analysisData.groupMetrics);
   const afterCompareGroups = getPrimaryGroups(afterData.groupMetrics);
-  const selectedSensitiveFeatures = analysisMeta.detectedSensitiveFeatures || [];
+  const selectedSensitiveFeatures =
+    analysisMeta.detectedSensitiveFeatures || [];
   const isIntersectional = selectedSensitiveFeatures.length > 1;
   const sensitiveLabel = isIntersectional
     ? "intersectional groups"
     : selectedSensitiveFeatures[0] || "group";
-  const primarySensitiveLabel = selectedSensitiveFeatures[0] || "selected feature";
+  const primarySensitiveLabel =
+    selectedSensitiveFeatures[0] || "selected feature";
   const outcomeRateLabel = getOutcomeRateLabel(
     analysisMeta.targetColumn,
     analysisMeta.targetPositiveLabel,
@@ -483,9 +532,10 @@ function App() {
       : analysisData.recommendationSource === "demo"
         ? "Demo recommendation"
         : "Recommended by the local fairness engine";
-  const recommendedFeatureText = selectedSensitiveFeatures.length > 0
-    ? selectedSensitiveFeatures.join(", ")
-    : "Select one or more sensitive features during upload";
+  const recommendedFeatureText =
+    selectedSensitiveFeatures.length > 0
+      ? selectedSensitiveFeatures.join(", ")
+      : "Select one or more sensitive features during upload";
 
   return (
     <div className="page-shell">
@@ -526,10 +576,17 @@ function App() {
         >
           <div className="hero-copy">
             <p className="eyebrow">Bias Detection Workspace</p>
-            <h2>FairLens AI - Detect Bias Before It Detects You</h2>
+            <h2>
+              <span className="hero-title-strong">FairLens AI </span>
+              <br></br>
+              <span className="hero-title-soft">
+                Detect Bias Before It Detects You
+              </span>
+            </h2>
             <p className="hero-text">
-              Evaluate who your model serves well, where outcomes diverge across groups, and
-              which mitigation path improves fairness with the least tradeoff.
+              Evaluate who your model serves well, where outcomes diverge across
+              groups, and which mitigation path improves fairness with the least
+              tradeoff.
             </p>
             <div className="hero-actions">
               <button
@@ -539,7 +596,11 @@ function App() {
               >
                 🚀 Start Analysis
               </button>
-              <button className="secondary-button" onClick={runAnalysis} type="button">
+              <button
+                className="secondary-button"
+                onClick={runAnalysis}
+                type="button"
+              >
                 📂 View Sample Demo
               </button>
             </div>
@@ -588,8 +649,12 @@ function App() {
                     if (headers.length > 0) {
                       setAvailableColumns(headers);
                       setColumnSamples(samples);
-                      const suggestedTarget = suggestTargetColumn(headers, samples);
-                      const resolvedTarget = suggestedTarget || headers[0] || "";
+                      const suggestedTarget = suggestTargetColumn(
+                        headers,
+                        samples,
+                      );
+                      const resolvedTarget =
+                        suggestedTarget || headers[0] || "";
                       setTargetColumn(resolvedTarget);
 
                       const detectedSensitive = suggestSensitiveFeatures(
@@ -627,9 +692,10 @@ function App() {
               <div className="field-group">
                 <label htmlFor="target-select">Outcome Column</label>
                 <p className="field-help">
-                  Choose the column that represents the final decision or result you want to
-                  evaluate for fairness. This is usually a binary outcome such as approved or
-                  rejected, hired or not hired, or {"<="}50K and {">"}50K.
+                  Choose the column that represents the final decision or result
+                  you want to evaluate for fairness. This is usually a binary
+                  outcome such as approved or rejected, hired or not hired, or{" "}
+                  {"<="}50K and {">"}50K.
                 </p>
                 <select
                   id="target-select"
@@ -637,8 +703,12 @@ function App() {
                   onChange={(e) => {
                     const newTarget = e.target.value;
                     setTargetColumn(newTarget);
-                    setAvailableSensitiveOptions(buildSensitiveOptions(availableColumns, newTarget));
-                    setSensitiveFeatures((current) => current.filter((feature) => feature !== newTarget));
+                    setAvailableSensitiveOptions(
+                      buildSensitiveOptions(availableColumns, newTarget),
+                    );
+                    setSensitiveFeatures((current) =>
+                      current.filter((feature) => feature !== newTarget),
+                    );
                   }}
                   className="panel"
                 >
@@ -646,14 +716,17 @@ function App() {
                   {availableColumns.map((col) => (
                     <option key={col} value={col}>
                       {col}
-                      {isBinaryLike(columnSamples[col] || []) ? " (binary recommended)" : ""}
+                      {isBinaryLike(columnSamples[col] || [])
+                        ? " (binary recommended)"
+                        : ""}
                     </option>
                   ))}
                 </select>
                 {isContinuousFeature(targetColumn, columnSamples, 6) ? (
                   <p className="field-help">
-                    This column looks continuous (for example raw income). For best
-                    fairness results, use a binary outcome column like approved/rejected.
+                    This column looks continuous (for example raw income). For
+                    best fairness results, use a binary outcome column like
+                    approved/rejected.
                   </p>
                 ) : null}
               </div>
@@ -661,12 +734,13 @@ function App() {
               <div className="field-group">
                 <span>Sensitive Features (Demographic / Group Columns)</span>
                 <p className="field-help">
-                  Pick columns like gender, age, race, income band, or region
-                  so FairLens can compare outcomes across groups.
+                  Pick columns like gender, age, race, income band, or region so
+                  FairLens can compare outcomes across groups.
                 </p>
                 {availableSensitiveOptions.length === 0 ? (
                   <p className="field-help">
-                    Upload a CSV to load candidate sensitive columns from the dataset.
+                    Upload a CSV to load candidate sensitive columns from the
+                    dataset.
                   </p>
                 ) : null}
                 {availableSensitiveOptions.map((feature) => (
@@ -688,7 +762,8 @@ function App() {
                 disabled={
                   isAnalyzing ||
                   isApplyingFixes ||
-                  (Boolean(datasetFile) && (!targetColumn || sensitiveFeatures.length === 0))
+                  (Boolean(datasetFile) &&
+                    (!targetColumn || sensitiveFeatures.length === 0))
                 }
               >
                 {isAnalyzing ? "Analyzing..." : "🔍 Analyze Bias"}
@@ -722,10 +797,12 @@ function App() {
               <p className="eyebrow">Step 4 - View Report</p>
               <h2>Bias report dashboard</h2>
               <p>
-                Dataset: {analysisMeta.datasetName || "Sample demo dataset"} | Target:{" "}
-                {analysisMeta.targetColumn}
+                Dataset: {analysisMeta.datasetName || "Sample demo dataset"} |
+                Target: {analysisMeta.targetColumn}
               </p>
-              {analysisMeta.targetNote ? <p>{analysisMeta.targetNote}</p> : null}
+              {analysisMeta.targetNote ? (
+                <p>{analysisMeta.targetNote}</p>
+              ) : null}
             </div>
             {hasMitigated ? (
               <button
@@ -749,8 +826,8 @@ function App() {
           {hasMitigated ? (
             <div className="success-banner">
               Fixes applied successfully. Updated model bias score:{" "}
-              <strong>{afterData.score.toFixed(2)}</strong>. Open comparison to see before
-              vs after outcomes.
+              <strong>{afterData.score.toFixed(2)}</strong>. Open comparison to
+              see before vs after outcomes.
             </div>
           ) : null}
 
@@ -759,18 +836,23 @@ function App() {
               <p className="panel-label">Bias Score Card</p>
               <div className="score-wrap">
                 <div>
-                  <span className="score-value">{analysisData.score.toFixed(2)}</span>
+                  <span className="score-value">
+                    {analysisData.score.toFixed(2)}
+                  </span>
                   <p className="score-status">{analysisData.status}</p>
                 </div>
-                <span className={`score-badge ${scoreBadgeClass}`}>{analysisData.badge}</span>
+                <span className={`score-badge ${scoreBadgeClass}`}>
+                  {analysisData.badge}
+                </span>
               </div>
               <p className="muted">
-                Primary fairness metric: {analysisMeta.fairnessMetric}. The severity
-                also accounts for the observed group outcome gap.
+                Primary fairness metric: {analysisMeta.fairnessMetric}. The
+                severity also accounts for the observed group outcome gap.
               </p>
               <p className="muted">
-                DP diff: {formatMetric(analysisData.demographicParityDifference)} | EO diff:{" "}
-                {formatMetric(analysisData.equalizedOddsDifference)}
+                DP diff:{" "}
+                {formatMetric(analysisData.demographicParityDifference)} | EO
+                diff: {formatMetric(analysisData.equalizedOddsDifference)}
               </p>
             </article>
 
@@ -782,15 +864,21 @@ function App() {
               <div className="bar-chart">
                 <div className="bar-row">
                   <span>Accuracy</span>
-                  <strong>{formatMetric(analysisData.performance?.accuracy)}</strong>
+                  <strong>
+                    {formatMetric(analysisData.performance?.accuracy)}
+                  </strong>
                 </div>
                 <div className="bar-row">
                   <span>Precision</span>
-                  <strong>{formatMetric(analysisData.performance?.precision)}</strong>
+                  <strong>
+                    {formatMetric(analysisData.performance?.precision)}
+                  </strong>
                 </div>
                 <div className="bar-row">
                   <span>Recall</span>
-                  <strong>{formatMetric(analysisData.performance?.recall)}</strong>
+                  <strong>
+                    {formatMetric(analysisData.performance?.recall)}
+                  </strong>
                 </div>
               </div>
             </article>
@@ -798,7 +886,8 @@ function App() {
             <article className="panel chart-panel">
               <div className="panel-head">
                 <p className="panel-label">
-                  {outcomeRateLabel} by {isIntersectional ? "intersectional groups" : sensitiveLabel}
+                  {outcomeRateLabel} by{" "}
+                  {isIntersectional ? "intersectional groups" : sensitiveLabel}
                 </p>
                 <span className="pill-soft">Parity Gap</span>
               </div>
@@ -818,12 +907,13 @@ function App() {
               </div>
               {isIntersectional ? (
                 <p className="muted chart-note">
-                  Multiple sensitive features were selected, so each bar shows a combined
-                  group such as gender plus race or age band.
+                  Multiple sensitive features were selected, so each bar shows a
+                  combined group such as gender plus race or age band.
                 </p>
               ) : (
                 <p className="muted chart-note">
-                  This chart compares predicted positive rates across {primarySensitiveLabel}.
+                  This chart compares predicted positive rates across{" "}
+                  {primarySensitiveLabel}.
                 </p>
               )}
             </article>
@@ -890,7 +980,8 @@ function App() {
                 <span>
                   <strong>Remove sensitive feature</strong>
                   <small>
-                    Exclude {primarySensitiveLabel} from model inputs where possible
+                    Exclude {primarySensitiveLabel} from model inputs where
+                    possible
                   </small>
                 </span>
               </label>
@@ -903,7 +994,9 @@ function App() {
                 />
                 <span>
                   <strong>Rebalance dataset</strong>
-                  <small>Increase representation across lower-rate groups</small>
+                  <small>
+                    Increase representation across lower-rate groups
+                  </small>
                 </span>
               </label>
 
@@ -915,7 +1008,9 @@ function App() {
                 />
                 <span>
                   <strong>Apply fairness constraint</strong>
-                  <small>Optimize prediction quality while reducing parity gaps</small>
+                  <small>
+                    Optimize prediction quality while reducing parity gaps
+                  </small>
                 </span>
               </label>
 
@@ -931,20 +1026,23 @@ function App() {
 
             <aside className="panel recommendation-panel">
               <p className="panel-label">Recommended Action</p>
-              <h3>{analysisData.recommendedAction || "Review the selected mitigation options"}</h3>
-              <p>
-                {recommendationSourceLabel}
-              </p>
+              <h3>
+                {analysisData.recommendedAction ||
+                  "Review the selected mitigation options"}
+              </h3>
+              <p>{recommendationSourceLabel}</p>
               <p className="muted">
                 Sensitive features detected: {recommendedFeatureText}
               </p>
               {analysisData.recommendationSource === "gemini" ? (
                 <p className="muted">
-                  This recommendation is generated from the current fairness metrics and group gaps
-                  using Google Gemini.
+                  This recommendation is generated from the current fairness
+                  metrics and group gaps using Google Gemini.
                 </p>
               ) : recommendationError ? (
-                <p className="muted">Google AI fallback: {recommendationError}</p>
+                <p className="muted">
+                  Google AI fallback: {recommendationError}
+                </p>
               ) : null}
             </aside>
           </div>
@@ -960,8 +1058,9 @@ function App() {
             <p>Review how the fairness profile changed after mitigation.</p>
             {isIntersectional ? (
               <p className="muted">
-                Because you selected multiple sensitive features, the comparison highlights
-                intersectional groups rather than a single demographic column.
+                Because you selected multiple sensitive features, the comparison
+                highlights intersectional groups rather than a single
+                demographic column.
               </p>
             ) : null}
           </div>
@@ -974,12 +1073,14 @@ function App() {
                 Bias: <strong>{analysisData.score.toFixed(2)}</strong>
               </p>
               <p className="muted">
-                Accuracy: {formatMetric(analysisData.performance?.accuracy)} | DP:{" "}
-                {formatMetric(analysisData.demographicParityDifference)} | EO:{" "}
-                {formatMetric(analysisData.equalizedOddsDifference)}
+                Accuracy: {formatMetric(analysisData.performance?.accuracy)} |
+                DP: {formatMetric(analysisData.demographicParityDifference)} |
+                EO: {formatMetric(analysisData.equalizedOddsDifference)}
               </p>
               <p className="compare-subtitle">
-                Most affected {isIntersectional ? "groups" : primarySensitiveLabel} before mitigation
+                Most affected{" "}
+                {isIntersectional ? "groups" : primarySensitiveLabel} before
+                mitigation
               </p>
               <div className="mini-chart">
                 {beforeCompareGroups.map(([label, value]) => (
@@ -1021,10 +1122,12 @@ function App() {
           </div>
 
           <div className="panel summary-panel">
-            Bias {afterData.score < analysisData.score ? "dropped" : "increased"} from{" "}
-            {analysisData.score.toFixed(2)} to {afterData.score.toFixed(2)},{" "}
-            {fairnessLift > 0 ? "improving" : "changing"} the fairness score by{" "}
-            {Math.abs(fairnessLift)}% with an accuracy delta of {accuracyDelta}.
+            Bias{" "}
+            {afterData.score < analysisData.score ? "dropped" : "increased"}{" "}
+            from {analysisData.score.toFixed(2)} to {afterData.score.toFixed(2)}
+            , {fairnessLift > 0 ? "improving" : "changing"} the fairness score
+            by {Math.abs(fairnessLift)}% with an accuracy delta of{" "}
+            {accuracyDelta}.
           </div>
         </section>
       </main>

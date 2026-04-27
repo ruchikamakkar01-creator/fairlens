@@ -164,13 +164,31 @@ select:disabled {
 }
 
 .hero-copy h2 {
-  font-family: "Lucida Bright", "Trebuchet MS", sans-serif;
-  font-size: clamp(2.8rem, 6.5vw, 4.7rem);
-  line-height: 1.1;
-  letter-spacing: -0.05em;
-  font-weight: 900;
-  max-width: 12ch;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: clamp(3.1rem, 6.8vw, 5rem);
+  line-height: 1.02;
+  letter-spacing: -0.025em;
+  font-weight: 600;
+  max-width: 15ch;
   text-wrap: balance;
+}
+
+.hero-title-strong,
+.hero-title-soft {
+  display: inline;
+}
+
+.hero-title-strong {
+  font-family: "DM Serif Display", Georgia, serif;
+  font-size: 1em;
+  font-weight: 700;
+  color: #1f3347;
+}
+
+.hero-title-soft {
+  font-size: 0.58em;
+  font-weight: 600;
+  color: #0e5f5b;
 }
 
 .hero-text,

@@ -92,7 +92,7 @@ function App() {
   const [fixes, setFixes] = useState({
     sensitive: true,
     rebalance: true,
-    constraint: true,
+    constraint: false,
   });
 
   const refs = {
@@ -228,6 +228,21 @@ function App() {
     return entries.slice(0, 2);
   }
 
+  function getComparisonGroups(beforeMetrics, afterMetrics) {
+    const labels = Array.from(
+      new Set([
+        ...Object.keys(beforeMetrics || {}),
+        ...Object.keys(afterMetrics || {}),
+      ]),
+    );
+
+    return labels.slice(0, 6).map((label) => ({
+      label,
+      before: typeof beforeMetrics?.[label] === "number" ? beforeMetrics[label] : 0,
+      after: typeof afterMetrics?.[label] === "number" ? afterMetrics[label] : 0,
+    }));
+  }
+
   async function parseApiResponse(response) {
     const raw = await response.text();
 
@@ -271,9 +286,16 @@ function App() {
     const generatedAt = new Date().toLocaleString();
     const datasetName = analysisMeta.datasetName || "Sample demo dataset";
     const target = analysisMeta.targetColumn || "Unknown target";
+    const readableOutcomeLabel = getReadableOutcomeLabel(
+      analysisMeta.targetColumn,
+      analysisMeta.targetPositiveLabel,
+    );
     const sensitive = selectedSensitiveFeatures.length > 0
       ? selectedSensitiveFeatures.join(", ")
       : "No sensitive features selected";
+    const auditScope = isIntersectional
+      ? "Intersectional multi-group audit enabled"
+      : "Single-attribute group audit enabled";
     const beforeSummary = [
       `Bias score: ${analysisData.score.toFixed(2)}`,
       `Severity: ${analysisData.status}`,
@@ -288,6 +310,9 @@ function App() {
     const executiveSummary = hasMitigated
       ? `FairLens analyzed ${datasetName} and reduced the measured bias score from ${analysisData.score.toFixed(2)} to ${afterData.score.toFixed(2)} while changing accuracy by ${accuracyDelta}. The strongest current recommendation is: ${afterData.recommendedAction || analysisData.recommendedAction}.`
       : `FairLens analyzed ${datasetName} and found a ${analysisData.status.toLowerCase()} fairness risk with a bias score of ${analysisData.score.toFixed(2)}. The strongest current recommendation is: ${analysisData.recommendedAction}.`;
+    const projectSummary = hasMitigated
+      ? `FairLens completed a multi-group fairness review, highlighted the most affected populations, and evaluated mitigation impact across bias and performance metrics. The mitigated model now shows a fairness lift of ${fairnessLiftLabel} with an accuracy delta of ${accuracyDeltaLabel}.`
+      : "FairLens completed a multi-group fairness review, highlighted the most affected populations, and generated a mitigation-ready decision summary for stakeholders.";
 
     const mitigationSection = hasMitigated
       ? `## Mitigation Results
@@ -329,6 +354,17 @@ Sensitive features: ${sensitive}
 ## Executive Summary
 
 ${executiveSummary}
+
+## Project Summary
+
+${projectSummary}
+
+## Audit Coverage
+
+- Audit mode: ${auditScope}
+- Sensitive attributes reviewed: ${sensitive}
+- Outcome metric displayed by group: Predicted ${readableOutcomeLabel} rate
+- Most affected group signal: ${mostAffectedGroupLabel}
 
 ## Baseline Findings
 
@@ -388,6 +424,18 @@ ${mitigationSection}
       return `Predicted ${cleanedTarget} positive rate`;
     }
     return "Predicted positive outcome rate";
+  }
+
+  function getReadableOutcomeLabel(targetColumnName, positiveLabel) {
+    const cleanedPositive = String(positiveLabel || "").trim();
+    if (cleanedPositive) {
+      return cleanedPositive;
+    }
+
+    const cleanedTarget = String(targetColumnName || "")
+      .replace(/_/g, " ")
+      .trim();
+    return cleanedTarget || "positive outcome";
   }
 
   async function runAnalysis() {
@@ -512,12 +560,13 @@ ${mitigationSection}
 
     setIsApplyingFixes(true);
     setApiError("");
-    setRequestMessage("Applying fairness fixes and recalculating impact...");
+    setRequestMessage("Preparing dataset for mitigation...");
     setCurrentScreen("loading");
 
-    try {
-      if (!datasetFile) {
-        const selectedCount = Object.values(fixes).filter(Boolean).length;
+      try {
+        if (!datasetFile) {
+          setRequestMessage("Comparing mitigation strategies and recalculating impact...");
+          const selectedCount = Object.values(fixes).filter(Boolean).length;
         setAfterData({
           score: selectedCount >= 2 ? 0.21 : selectedCount === 1 ? 0.36 : 0.58,
           demographicParityDifference:
@@ -553,6 +602,14 @@ ${mitigationSection}
       formData.append("target_column", targetColumn);
       formData.append("sensitive_features", JSON.stringify(sensitiveFeatures));
       formData.append("fixes", JSON.stringify(fixes));
+
+      setRequestMessage(
+        fixes.constraint
+          ? "Training a fairness-aware model. This step can take a little longer..."
+          : fixes.rebalance
+            ? "Rebalancing groups and recalculating fairness outcomes..."
+            : "Recomputing outcomes with the selected mitigation options...",
+      );
 
       const response = await fetch("/api/mitigate", {
         method: "POST",
@@ -637,6 +694,10 @@ ${mitigationSection}
   const currentGroups = getGroupEntries(analysisData.groupMetrics);
   const beforeCompareGroups = getPrimaryGroups(analysisData.groupMetrics);
   const afterCompareGroups = getPrimaryGroups(afterData.groupMetrics);
+  const comparisonGroups = getComparisonGroups(
+    analysisData.groupMetrics,
+    afterData.groupMetrics,
+  );
   const selectedSensitiveFeatures =
     analysisMeta.detectedSensitiveFeatures || [];
   const isIntersectional = selectedSensitiveFeatures.length > 1;
@@ -1195,13 +1256,13 @@ ${mitigationSection}
                   onChange={() => toggleFix("constraint")}
                   type="checkbox"
                 />
-                <span>
-                  <strong>Apply fairness constraint</strong>
-                  <small>
-                    Optimize prediction quality while reducing parity gaps
-                  </small>
-                </span>
-              </label>
+                  <span>
+                    <strong>Apply fairness constraint</strong>
+                    <small>
+                      Optimize prediction quality while reducing parity gaps. This is the slowest option.
+                    </small>
+                  </span>
+                </label>
 
               <button
                 className="primary-button"
@@ -1297,6 +1358,42 @@ ${mitigationSection}
                     {formatMetric(afterData.performance?.accuracy)}
                   </strong>
                 </div>
+              </div>
+            </article>
+
+            <article className="panel group-compare-panel">
+              <div className="panel-head">
+                <p className="panel-label">Group Fairness Comparison</p>
+                <span className="pill-soft">Audit Coverage</span>
+              </div>
+              <p className="muted">
+                Review how predicted positive outcome rates shifted across the audited groups after mitigation.
+              </p>
+              <div className="group-compare-list">
+                {comparisonGroups.map((group) => (
+                  <div key={group.label} className="group-compare-row">
+                    <div className="group-compare-header">
+                      <strong>{group.label}</strong>
+                      <span>
+                        {formatPercent(group.before)} → {formatPercent(group.after)}
+                      </span>
+                    </div>
+                    <div className="group-compare-bars">
+                      <div className="group-compare-track">
+                        <span
+                          className="group-compare-fill before-fill"
+                          style={{ width: `${group.before}%` }}
+                        ></span>
+                      </div>
+                      <div className="group-compare-track">
+                        <span
+                          className="group-compare-fill after-fill"
+                          style={{ width: `${group.after}%` }}
+                        ></span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </article>
 

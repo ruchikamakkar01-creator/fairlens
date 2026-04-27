@@ -610,6 +610,62 @@ select {
   grid-column: span 2;
 }
 
+.group-compare-panel {
+  grid-column: span 2;
+}
+
+.group-compare-list {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.group-compare-row {
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.group-compare-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.group-compare-header span {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.group-compare-bars {
+  display: grid;
+  gap: 10px;
+}
+
+.group-compare-track {
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(17, 32, 51, 0.08);
+  overflow: hidden;
+}
+
+.group-compare-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.before-fill {
+  background: linear-gradient(90deg, #f59e0b, #f97316);
+}
+
+.after-fill {
+  background: linear-gradient(90deg, #0f766e, #34d399);
+}
+
 .compare-panel.improved {
   border-color: rgba(31, 157, 98, 0.22);
   background: linear-gradient(
@@ -690,7 +746,8 @@ select {
   .score-panel,
   .alerts-panel,
   .summary-highlight-panel,
-  .compare-metrics-panel {
+  .compare-metrics-panel,
+  .group-compare-panel {
     grid-column: span 1;
   }
 
@@ -719,6 +776,11 @@ select {
   .summary-highlight-grid,
   .compare-metrics-grid {
     grid-template-columns: 1fr;
+  }
+
+  .group-compare-header {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .bar-row,

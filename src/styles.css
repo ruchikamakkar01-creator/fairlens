@@ -24,8 +24,16 @@ body {
   font-family: "Space Grotesk", "Segoe UI", sans-serif;
   color: var(--text);
   background:
-    radial-gradient(circle at top left, rgba(15, 118, 110, 0.14), transparent 30%),
-    radial-gradient(circle at top right, rgba(255, 184, 77, 0.18), transparent 25%),
+    radial-gradient(
+      circle at top left,
+      rgba(15, 118, 110, 0.14),
+      transparent 30%
+    ),
+    radial-gradient(
+      circle at top right,
+      rgba(255, 184, 77, 0.18),
+      transparent 25%
+    ),
     linear-gradient(180deg, #fcfdff 0%, var(--bg) 100%);
 }
 
@@ -156,12 +164,13 @@ select:disabled {
 }
 
 .hero-copy h2 {
-  font-family: "Manrope", "Segoe UI", sans-serif;
-  font-size: clamp(3rem, 7vw, 5.1rem);
-  line-height: 0.96;
-  letter-spacing: -0.06em;
-  font-weight: 800;
-  max-width: 11ch;
+  font-family: "Lucida Bright", "Trebuchet MS", sans-serif;
+  font-size: clamp(2.8rem, 6.5vw, 4.7rem);
+  line-height: 1.1;
+  letter-spacing: -0.05em;
+  font-weight: 900;
+  max-width: 12ch;
+  text-wrap: balance;
 }
 
 .hero-text,
@@ -174,7 +183,10 @@ select:disabled {
 }
 
 .hero-text {
-  max-width: 720px;
+  max-width: 760px;
+  margin-top: 18px;
+  font-size: 1.08rem;
+  text-wrap: balance;
 }
 
 .hero-actions {
@@ -271,7 +283,11 @@ select:disabled {
   min-height: 320px;
   border-radius: 26px;
   border: 2px dashed rgba(15, 118, 110, 0.28);
-  background: linear-gradient(180deg, rgba(15, 118, 110, 0.06), rgba(255, 255, 255, 0.7));
+  background: linear-gradient(
+    180deg,
+    rgba(15, 118, 110, 0.06),
+    rgba(255, 255, 255, 0.7)
+  );
   text-align: center;
   padding: 20px;
   cursor: pointer;
@@ -527,7 +543,11 @@ select {
 
 .compare-panel.improved {
   border-color: rgba(31, 157, 98, 0.22);
-  background: linear-gradient(180deg, rgba(31, 157, 98, 0.08), rgba(255, 255, 255, 0.82));
+  background: linear-gradient(
+    180deg,
+    rgba(31, 157, 98, 0.08),
+    rgba(255, 255, 255, 0.82)
+  );
 }
 
 .before {

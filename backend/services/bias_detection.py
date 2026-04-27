@@ -1,6 +1,9 @@
 import io
 import json
+import logging
 import os
+import re
+import time
 import urllib.error
 import urllib.request
 
@@ -10,9 +13,9 @@ from fastapi import HTTPException, UploadFile
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
+from sklearn.metrics import accuracy_score, precision_score, recall_score
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import accuracy_score, precision_score, recall_score
 from sklearn.preprocessing import OneHotEncoder
 
 from backend.models.schema import AnalysisResponse
@@ -21,9 +24,11 @@ from backend.utils.preprocessing import (
     build_insights_and_alerts,
     build_recommendation,
     derive_severity,
-    normalize_target,
     normalize_sensitive_features,
+    normalize_target,
 )
+
+logger = logging.getLogger("fairlens.gemini")
 
 
 def gemini_enabled() -> bool:
@@ -33,86 +38,259 @@ def gemini_enabled() -> bool:
     return bool(os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
 
 
-def call_gemini(prompt: str, max_output_tokens: int = 220) -> str | None:
-    if not gemini_enabled():
+def _split_sentences(text: str) -> list[str]:
+    return [segment.strip() for segment in re.split(r"(?<=[.!?])\s+", text.strip()) if segment.strip()]
+
+
+def _clean_leading_label(text: str) -> str:
+    cleaned = re.sub(r"^\s*(here are|below are|these are)\b[^:]*:\s*", "", text, flags=re.IGNORECASE)
+    cleaned = re.sub(r"^\s*(insight|recommendation)s?\s*:\s*", "", cleaned, flags=re.IGNORECASE)
+    return cleaned.strip()
+
+
+def _is_complete_sentence(text: str) -> bool:
+    stripped = text.strip()
+    return len(stripped) >= 20 and stripped.endswith((".", "!", "?"))
+
+
+def _normalize_sentence(text: str) -> str:
+    cleaned = " ".join(_clean_leading_label(text).split())
+    if cleaned and not cleaned.endswith((".", "!", "?")):
+        cleaned = f"{cleaned}."
+    return cleaned
+
+
+def _extract_json_object(text: str) -> dict | None:
+    candidate = text.strip()
+
+    # Remove optional markdown fences before parsing.
+    fenced_match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", candidate, flags=re.DOTALL | re.IGNORECASE)
+    if fenced_match:
+        candidate = fenced_match.group(1).strip()
+
+    # Try direct JSON parsing first.
+    try:
+        parsed = json.loads(candidate)
+        if isinstance(parsed, dict):
+            return parsed
+        if isinstance(parsed, str):
+            nested = json.loads(parsed)
+            return nested if isinstance(nested, dict) else None
+    except json.JSONDecodeError:
+        pass
+
+    # Fall back to extracting the first JSON object-looking block.
+    start = candidate.find("{")
+    end = candidate.rfind("}")
+    if start == -1 or end == -1 or end <= start:
         return None
+
+    snippet = candidate[start : end + 1]
+    try:
+        parsed = json.loads(snippet)
+        if isinstance(parsed, dict):
+            return parsed
+        if isinstance(parsed, str):
+            nested = json.loads(parsed)
+            return nested if isinstance(nested, dict) else None
+    except json.JSONDecodeError:
+        return None
+
+    return None
+
+
+def _parse_labeled_narrative(text: str) -> tuple[list[str] | None, str | None]:
+    insights: list[str] = []
+    recommendation_parts: list[str] = []
+    current_label: str | None = None
+
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        upper = line.upper()
+        if upper.startswith("INSIGHT_") and ":" in line:
+            _, value = line.split(":", 1)
+            sentence = _normalize_sentence(value)
+            if _is_complete_sentence(sentence):
+                insights.append(sentence)
+            current_label = None
+            continue
+
+        if upper.startswith("RECOMMENDATION:"):
+            _, value = line.split(":", 1)
+            if value.strip():
+                recommendation_parts.append(value.strip())
+            current_label = "recommendation"
+            continue
+
+        if current_label == "recommendation":
+            recommendation_parts.append(line)
+
+    recommendation_text = _clean_leading_label(" ".join(recommendation_parts))
+    recommendation_sentences = [_normalize_sentence(sentence) for sentence in _split_sentences(recommendation_text)]
+    complete_recommendation = [sentence for sentence in recommendation_sentences if _is_complete_sentence(sentence)]
+
+    if len(insights) < 2 or not complete_recommendation:
+        return None, None
+
+    return insights[:3], " ".join(complete_recommendation[:2])
+
+
+def gemini_models() -> list[str]:
+    configured = os.getenv("GEMINI_MODELS", "").strip()
+    if configured:
+        models = [model.strip() for model in configured.split(",") if model.strip()]
+        if models:
+            return models
+
+    primary = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+    fallbacks = ["gemini-2.5-flash-lite"]
+    ordered = [primary, *fallbacks]
+    seen = set()
+    deduped = []
+    for model in ordered:
+        if model and model not in seen:
+            deduped.append(model)
+            seen.add(model)
+    return deduped
+
+
+def call_gemini(
+    prompt: str,
+    *,
+    max_output_tokens: int = 220,
+    response_schema: dict | None = None,
+) -> tuple[str | None, str | None]:
+    if not gemini_enabled():
+        return None, "Gemini is disabled or no Google API key is configured."
 
     api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.3, "maxOutputTokens": max_output_tokens},
-    }
-    request = urllib.request.Request(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "x-goog-api-key": api_key,
-        },
-        method="POST",
-    )
+    models = gemini_models()
+    last_error = "Gemini request failed."
 
-    try:
-        with urllib.request.urlopen(request, timeout=5) as response:
-            raw_response = response.read().decode("utf-8")
-            parsed = json.loads(raw_response)
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError):
-        return None
+    for model in models:
+        attempts = 3
+        for attempt in range(attempts):
+            generation_config = {
+                "temperature": 0.2,
+                "maxOutputTokens": max_output_tokens,
+            }
+            if response_schema:
+                generation_config["responseMimeType"] = "application/json"
+                generation_config["responseJsonSchema"] = response_schema
 
-    try:
-        return parsed["candidates"][0]["content"]["parts"][0]["text"].strip()
-    except (KeyError, IndexError, TypeError):
-        return None
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": generation_config,
+            }
+            request = urllib.request.Request(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": api_key,
+                },
+                method="POST",
+            )
+
+            try:
+                with urllib.request.urlopen(request, timeout=12) as response:
+                    raw_response = response.read().decode("utf-8")
+                    parsed = json.loads(raw_response)
+            except urllib.error.HTTPError as exc:
+                try:
+                    error_body = exc.read().decode("utf-8")
+                except Exception:
+                    error_body = ""
+                logger.warning("Gemini HTTP error %s on %s: %s", exc.code, model, error_body or exc.reason)
+                last_error = f"Gemini request failed with HTTP {exc.code} on {model}."
+                if exc.code in {429, 500, 503} and attempt < attempts - 1:
+                    time.sleep(0.6 * (2**attempt))
+                    continue
+                break
+            except urllib.error.URLError as exc:
+                logger.warning("Gemini URL error on %s: %s", model, exc.reason)
+                last_error = f"Gemini request could not reach Google AI services on {model}."
+                if attempt < attempts - 1:
+                    time.sleep(0.6 * (2**attempt))
+                    continue
+                break
+            except TimeoutError:
+                logger.warning("Gemini request timed out on %s.", model)
+                last_error = f"Gemini request timed out on {model}."
+                if attempt < attempts - 1:
+                    time.sleep(0.6 * (2**attempt))
+                    continue
+                break
+            except json.JSONDecodeError:
+                logger.warning("Gemini returned invalid JSON on %s.", model)
+                last_error = f"Gemini returned an unreadable response on {model}."
+                break
+
+            try:
+                return parsed["candidates"][0]["content"]["parts"][0]["text"].strip(), None
+            except (KeyError, IndexError, TypeError):
+                logger.warning("Gemini response missing expected text on %s: %s", model, parsed)
+                last_error = f"Gemini returned no usable text on {model}."
+                break
+
+    return None, last_error
 
 
-def generate_gemini_insights(
+def generate_gemini_narrative(
     sensitive_name: str,
     bias_score: float,
     group_metrics: dict[str, float],
     target_column: str,
     target_positive_label: str | None,
-) -> list[str] | None:
+) -> tuple[list[str] | None, str | None, str | None]:
     groups_summary = ", ".join(f"{group}: {value:.1f}%" for group, value in group_metrics.items())
     positive_label = target_positive_label or "positive outcome"
     prompt = (
-        "You are helping a responsible-AI hackathon team. "
-        "Produce exactly 3 short bullet-style insights, each one complete, grammatically correct sentence. "
+        "You are helping a responsible-AI hackathon team reviewing fairness results. "
+        "Return plain text only in this exact format with no extra intro, markdown, code fences, or outro:\n"
+        "INSIGHT_1: <complete sentence>\n"
+        "INSIGHT_2: <complete sentence>\n"
+        "INSIGHT_3: <complete sentence>\n"
+        "RECOMMENDATION: <1 to 2 complete sentences>\n"
         f"Target column: {target_column}. Positive outcome label: {positive_label}. "
         f"Sensitive features: {sensitive_name}. Bias score: {bias_score:.2f}. "
         f"Predicted {positive_label} rates: {groups_summary}. "
-        "Focus on fairness patterns, practical interpretation, and plain English. Avoid legal advice. "
-        "Each insight must be a complete sentence ending with a period."
+        "The insights should focus on fairness patterns, practical interpretation, and plain English. "
+        "The recommendation should suggest the strongest next step among rebalancing, removing sensitive features from inputs where appropriate, "
+        "or applying a fairness constraint. Avoid legal advice."
     )
-    text = call_gemini(prompt, max_output_tokens=300)
+    text, error = call_gemini(prompt, max_output_tokens=280)
     if not text:
-        return None
+        return None, None, error
 
-    lines = [line.strip("-• ").strip() for line in text.splitlines() if line.strip()]
-    cleaned = [line for line in lines if len(line) > 10]
-    return cleaned[:3] if cleaned else None
+    parsed_insights, parsed_recommendation = _parse_labeled_narrative(text)
+    if parsed_insights and parsed_recommendation:
+        return parsed_insights, parsed_recommendation, None
 
-
-def generate_gemini_recommendation(
-    sensitive_name: str,
-    bias_score: float,
-    group_metrics: dict[str, float],
-    target_column: str,
-    target_positive_label: str | None,
-) -> str | None:
-    groups_summary = ", ".join(f"{group}: {value:.1f}%" for group, value in group_metrics.items())
-    positive_label = target_positive_label or "positive outcome"
-    prompt = (
-        "You are advising a team building a fairness dashboard for a Google hackathon. "
-        "Write one complete, concise mitigation recommendation with 1 to 2 complete sentences. "
+    logger.warning("Gemini labeled output was invalid, retrying with simpler phrasing: %s", text)
+    fallback_prompt = (
+        "Respond with exactly four lines and nothing else.\n"
+        "INSIGHT_1: one complete sentence.\n"
+        "INSIGHT_2: one complete sentence.\n"
+        "INSIGHT_3: one complete sentence.\n"
+        "RECOMMENDATION: one or two complete sentences.\n"
         f"Target column: {target_column}. Positive outcome label: {positive_label}. "
         f"Sensitive features: {sensitive_name}. Bias score: {bias_score:.2f}. "
-        f"Predicted {positive_label} rates: {groups_summary}. "
-        "Recommend the most useful next step among rebalancing, removing sensitive features from inputs where appropriate, "
-        "or applying a fairness constraint. "
-        "Ensure your response is a complete, grammatically correct sentence or sentences."
+        f"Predicted {positive_label} rates: {groups_summary}."
     )
-    return call_gemini(prompt, max_output_tokens=180)
+    fallback_text, fallback_error = call_gemini(fallback_prompt, max_output_tokens=220)
+    if not fallback_text:
+        return None, None, fallback_error or "Gemini returned invalid labeled output."
+
+    parsed_insights, parsed_recommendation = _parse_labeled_narrative(fallback_text)
+    if parsed_insights and parsed_recommendation:
+        return parsed_insights, parsed_recommendation, None
+
+    logger.warning("Gemini simpler labeled fallback was also invalid: %s", fallback_text)
+    return None, None, "Gemini returned invalid labeled output."
 
 
 def build_analysis_response(
@@ -150,7 +328,7 @@ def build_analysis_response(
         sensitive_name=sensitive_label,
         outcome_label=(target_positive_label or target_column).replace("_", " ").lower(),
     )
-    gemini_insights = generate_gemini_insights(
+    gemini_insights, gemini_recommendation, gemini_error = generate_gemini_narrative(
         sensitive_label,
         bias_score,
         group_metrics,
@@ -158,13 +336,6 @@ def build_analysis_response(
         target_positive_label,
     )
     recommendation = build_recommendation(bias_score, usable_sensitive, group_metrics)
-    gemini_recommendation = generate_gemini_recommendation(
-        sensitive_label,
-        bias_score,
-        group_metrics,
-        target_column,
-        target_positive_label,
-    )
     insights_source = "gemini" if gemini_insights else "rule-based"
     recommendation_source = "gemini" if gemini_recommendation else "rule-based"
 
@@ -184,8 +355,12 @@ def build_analysis_response(
         group_metrics=group_metrics,
         insights=gemini_insights or insights,
         insights_source=insights_source,
+        insights_status="ok" if gemini_insights else "fallback",
+        insights_error=gemini_error,
         recommended_action=gemini_recommendation or recommendation,
         recommendation_source=recommendation_source,
+        recommendation_status="ok" if gemini_recommendation else "fallback",
+        recommendation_error=gemini_error,
         alerts=alerts,
         error_headline=headline,
         error_text=error_text,

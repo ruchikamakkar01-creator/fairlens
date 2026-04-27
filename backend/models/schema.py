@@ -25,8 +25,12 @@ class AnalysisResponse(BaseModel):
     group_metrics: Dict[str, float]
     insights: List[str]
     insights_source: str | None = None
+    insights_status: str | None = None
+    insights_error: str | None = None
     recommended_action: str | None = None
     recommendation_source: str | None = None
+    recommendation_status: str | None = None
+    recommendation_error: str | None = None
     alerts: List[str]
     error_headline: str
     error_text: str
